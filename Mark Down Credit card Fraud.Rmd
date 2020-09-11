@@ -1,0 +1,134 @@
+---
+title: "Credit Card Fraud Detection"
+author: "Jim Wanji"
+date: "********"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Introduction
+This data set was retrieved from www.Kaggle.com and was collected and analysed during a research collaboration of Worldline and the Machine Learning Group (http://mlg.ulb.ac.be) of ULB (Université Libre de Bruxelles) on big data mining and fraud detection.
+
+The data set contains transactions made by credit card holders in September 2013 by european cardholders.The data set contains 284,807 transactions and has just 492 fraudulent transactions therefore it is highly unbalanced.
+
+To determine fraudulent transactions,we shall be using supervised learning technique such as a decision tree to predict fraud or no-fraud transactions.
+We shall also be using Area Under the Curve to determine how well our model was.
+
+```{r}
+
+```
+
+## Import Data Set and View Summary 
+
+```{r cars}
+credit_card <- read.csv("creditcard.csv")
+summary(credit_card)
+```
+
+Another version of summary data
+
+```{r}
+library(dplyr)
+glimpse(credit_card)
+```
+
+convert class varible to a factor
+```{r}
+credit_card$Class <- as.factor(credit_card$Class)
+```
+
+A table of number of rows for fraudulent transactions and non-fraudulent transactions
+```{r}
+table(credit_card$Class)
+```
+
+We convert 0 and 1 factor variable to "fraud" and "no-fraud" transactions
+```{r}
+credit_time <- credit_card[,-1]
+
+levels(credit_time$Class) <- c("no_fraud","fraud")
+
+glimpse(credit_time)
+```
+
+## Create Partition , Training and Test Sets
+```{r}
+library(caret)
+
+dataset <- createDataPartition(y=credit_time$Class, p=0.75, list = F)
+
+training <- credit_time[dataset,]
+
+testing <- credit_time[-dataset,]
+```
+
+
+We shall create a function that takes in a dataset and a sampling method. For this project , we shall evaluate output on three sampling methods:
+up-sampling,down-sampling and smote method. 
+We will be  creating a train control object in this function that trains our data set on a 10 fold cross validation method.This train control object alos serves as a basis for hyper-parameters tunning for a model.
+
+```{r}
+trainDTree <- function(train_data, samplingMode = NULL) {
+  # Set random seed for reproducible results
+  set.seed(123)
+  
+  # Set train control with 10-fold cross-validation
+  ctrl <- trainControl(method = "cv", number = 10,
+                       classProbs = TRUE,
+                       summaryFunction = twoClassSummary,
+                       # Set sampling method
+                       sampling = samplingMode)
+  
+  # Train model on data with target variable and ROC metric
+  train(Class ~ ., data = train_data,
+        method = "rpart", metric = "ROC", trControl = ctrl)
+}
+```
+
+
+```{r}
+## Train data set based on raw training data
+(reg_train <- trainDTree(training))
+
+#Train data set based on down-sampling
+(reg_down <-  trainDTree(training , samplingMode = "down"))
+
+#Train data set based on up-sampling
+(reg_up<-  trainDTree(training , samplingMode = "up"))
+
+#Train data set based on smote method
+(reg_smote <- trainDTree(training , samplingMode = "smote"))
+```
+
+```{r}
+# We create a list of all methods
+mdl_list <- list(orig = reg_train, down = reg_down , up = reg_up,smote = reg_smote )
+
+#We creat a function that takes in a model and data and returns the auc based on the  class probability
+get_auc <- function(model, data) {
+  library(Metrics)
+  
+  # Predict class probabilities on the test data
+  preds <- predict(model, data, type = "prob")[, "no_fraud"]
+  
+  # Calculate and return AUC value
+  auc(data$Class == "no_fraud", preds)
+}
+
+```
+
+## Final Results
+```{r}
+auc_values <- sapply(mdl_list, get_auc, data = testing)
+
+print(auc_values)
+
+```
+
+## Conclusion
+Based on the results, we recorded the lowest performance with using the orig data set. Up-sampling,down-sampling and smote methods had very
+close performance but the up-sampling method achieved the best performance based on the Area Under the Curve measure.
+
+
